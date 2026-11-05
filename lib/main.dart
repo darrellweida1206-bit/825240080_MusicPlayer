@@ -1,18 +1,79 @@
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:audioplayers/audioplayers.dart';
+import 'song.dart';
+import 'detail_page.dart';
+
+const Color hijau = Color(0xFF1DB954);
 
 void main() {
-  runApp(const MaterialApp(
-    home: MyApp(),
-    debugShowCheckedModeBanner: false,
-  ));
+  runApp(const MusicApp());
 }
 
+// Mengatur Dark Mode dan Light Mode
+class MusicApp extends StatefulWidget {
+  const MusicApp({super.key});
+
+  @override
+  State<MusicApp> createState() => _MusicAppState();
+}
+
+class _MusicAppState extends State<MusicApp> {
+  bool gelap = true;
+
+  ThemeData buatTema(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: hijau,
+        brightness: brightness,
+      ).copyWith(primary: hijau),
+      scaffoldBackgroundColor: dark
+          ? Color(0xFF121212)
+          : Color(0xFFF7F8F7),
+      appBarTheme: AppBarTheme(
+        backgroundColor: dark
+            ? Color(0xFF121212)
+            : Colors.white,
+        foregroundColor: dark
+            ? Colors.white
+            : Color(0xFF171717),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: buatTema(Brightness.light),
+      darkTheme: buatTema(Brightness.dark),
+      themeMode: gelap ? ThemeMode.dark : ThemeMode.light,
+      home: MyApp(
+        isDarkMode: gelap,
+        onToggleTema: () {
+          setState(() {
+            gelap = !gelap;
+          });
+        },
+      ),
+    );
+  }
+}
+
+// HALAMAN UTAMA
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final bool isDarkMode;
+  final VoidCallback onToggleTema;
+
+  const MyApp({
+    super.key,
+    required this.isDarkMode,
+    required this.onToggleTema,
+  });
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -20,9 +81,11 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final controller = TextEditingController();
-  List songs = [];
+
+  List<Song> songs = [];
   bool loading = false;
   bool sudahCari = false;
+  bool urutAZ = false;
   String pesanError = '';
 
   // Mengambil data lagu dari iTunes API
@@ -36,6 +99,8 @@ class _MyAppState extends State<MyApp> {
 
     setState(() {
       loading = true;
+      sudahCari = false;
+      songs = [];
       pesanError = '';
     });
 
@@ -50,22 +115,29 @@ class _MyAppState extends State<MyApp> {
     );
 
     try {
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(
+        Duration(seconds: 15),
+      );
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final List hasil = data['results'] ?? [];
 
         setState(() {
-          songs = data['results'] ?? [];
+          // Mengubah hasil JSON menjadi List Song
+          songs = hasil
+              .map((item) => Song.fromJson(item))
+              .toList();
           sudahCari = true;
         });
       } else {
         setState(() {
           songs = [];
           sudahCari = true;
-          pesanError = 'Gagal mengambil data lagu';
+          pesanError =
+          'Gagal mengambil data lagu (HTTP ${response.statusCode})';
         });
       }
     } catch (e) {
@@ -75,7 +147,8 @@ class _MyAppState extends State<MyApp> {
         setState(() {
           songs = [];
           sudahCari = true;
-          pesanError = 'Periksa koneksi internet Anda';
+          pesanError =
+          'Gagal memuat lagu. Periksa koneksi internet Anda.';
         });
       }
     } finally {
@@ -95,14 +168,47 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    final warnaCard = dark ? Color(0xFF242424) : Colors.white;
+    final warnaSekunder = dark ? Colors.white70 : Colors.black54;
+
+    // Mengurutkan lagu A-Z jika diaktifkan
+    final daftarLagu = List<Song>.from(songs);
+
+    if (urutAZ) {
+      daftarLagu.sort(
+            (a, b) => a.trackName.toLowerCase().compareTo(
+          b.trackName.toLowerCase(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Music Player'),
-        backgroundColor: Colors.lightGreen,
-        foregroundColor: Colors.white,
+        title: Text(
+          'Music Player',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          // Tombol Dark/Light Mode
+          IconButton(
+            tooltip: widget.isDarkMode
+                ? 'Light Mode'
+                : 'Dark Mode',
+            icon: Icon(
+              widget.isDarkMode
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+              color: hijau,
+            ),
+            onPressed: widget.onToggleTema,
+          ),
+          SizedBox(width: 8),
+        ],
       ),
 
-      // Membatasi lebar pencarian pada layar komputer
+      // Lebar halaman dibatasi agar responsif
       body: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: 650),
@@ -110,6 +216,9 @@ class _MyAppState extends State<MyApp> {
             padding: EdgeInsets.all(16),
             child: Column(
               children: [
+                SizedBox(height: 8),
+
+                // Kolom pencarian lagu
                 TextField(
                   controller: controller,
                   onChanged: (value) {
@@ -119,7 +228,7 @@ class _MyAppState extends State<MyApp> {
                     labelText: 'Judul lagu atau artis',
                     prefixIcon: Icon(Icons.search),
 
-                    // Tombol menghapus teks pencarian
+                    // Tombol menghapus teks
                     suffixIcon: controller.text.isNotEmpty
                         ? IconButton(
                       icon: Icon(Icons.clear),
@@ -130,48 +239,69 @@ class _MyAppState extends State<MyApp> {
                     )
                         : null,
 
-                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: warnaCard,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
                     focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide(
-                        color: Colors.lightGreen,
+                        color: hijau,
                         width: 2,
                       ),
                     ),
-                    floatingLabelStyle: TextStyle(
-                      color: Colors.lightGreen,
+                    floatingLabelStyle: TextStyle(color: hijau),
+                  ),
+                  onSubmitted: (_) {
+                    if (!loading) cariLagu();
+                  },
+                ),
+
+                SizedBox(height: 14),
+
+                // Tombol mencari lagu
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: hijau,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                    onPressed: loading ? null : cariLagu,
+                    icon: Icon(Icons.search),
+                    label: Text(
+                      'Cari Lagu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  onSubmitted: (_) => cariLagu(),
                 ),
 
-                SizedBox(height: 12),
+                SizedBox(height: 20),
 
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.lightGreen,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: loading ? null : cariLagu,
-                  child: Text('Cari Lagu'),
-                ),
-
-                SizedBox(height: 16),
-
+                // Loading
                 if (loading)
-                  CircularProgressIndicator(
-                    color: Colors.lightGreen,
-                  ),
+                  CircularProgressIndicator(color: hijau),
 
+                // Pesan error
                 if (!loading && pesanError.isNotEmpty)
                   Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
                       pesanError,
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: Colors.redAccent),
                       textAlign: TextAlign.center,
                     ),
                   ),
 
+                // Pesan ketika lagu tidak ditemukan
                 if (!loading &&
                     pesanError.isEmpty &&
                     sudahCari &&
@@ -180,58 +310,100 @@ class _MyAppState extends State<MyApp> {
                     padding: EdgeInsets.all(16),
                     child: Text(
                       'Lagu tidak ditemukan',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: warnaSekunder),
                     ),
                   ),
 
+                // Jumlah hasil dan pengurutan A-Z
                 if (!loading && songs.isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Hasil Pencarian (${songs.length} lagu)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Hasil Pencarian (${songs.length} lagu)',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            urutAZ = !urutAZ;
+                          });
+                        },
+                        icon: Icon(
+                          Icons.sort_by_alpha,
+                          color: hijau,
+                        ),
+                        label: Text(
+                          urutAZ ? 'Default' : 'A-Z',
+                          style: TextStyle(
+                            color: hijau,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                 SizedBox(height: 8),
 
+                // Menampilkan daftar lagu
                 Expanded(
                   child: ListView.builder(
-                    itemCount: songs.length,
+                    itemCount: daftarLagu.length,
                     itemBuilder: (context, index) {
+                      final lagu = daftarLagu[index];
+
                       return Card(
-                        margin: EdgeInsets.only(bottom: 8),
+                        color: warnaCard,
+                        elevation: 0,
+                        margin: EdgeInsets.only(bottom: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                         child: ListTile(
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: Image.network(
-                              songs[index]['artworkUrl100'] ?? '',
+                              lagu.artworkUrl100,
                               width: 55,
                               height: 55,
                               fit: BoxFit.cover,
                               errorBuilder: (c, e, s) =>
-                                  Icon(Icons.music_note),
+                                  Icon(Icons.music_note, size: 40),
                             ),
                           ),
                           title: Text(
-                            songs[index]['trackName'] ?? '-',
+                            lagu.trackName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           subtitle: Text(
-                            songs[index]['artistName'] ?? '-',
+                            lagu.artistName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: warnaSekunder),
                           ),
                           trailing: Icon(
                             Icons.chevron_right,
-                            color: Colors.lightGreen,
+                            color: hijau,
                           ),
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => DetailPage(
-                                  song: songs[index],
+                                  song: lagu,
                                 ),
                               ),
                             );
@@ -240,291 +412,6 @@ class _MyAppState extends State<MyApp> {
                       );
                     },
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// HALAMAN DETAIL LAGU
-class DetailPage extends StatefulWidget {
-  final Map song;
-
-  const DetailPage({super.key, required this.song});
-
-  @override
-  State<DetailPage> createState() => _DetailPageState();
-}
-
-class _DetailPageState extends State<DetailPage> {
-  final player = AudioPlayer();
-  bool isPlaying = false;
-  Duration posisi = Duration.zero;
-  Duration total = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Memperbarui tombol Play/Pause
-    player.onPlayerStateChanged.listen((state) {
-      if (mounted) {
-        setState(() {
-          isPlaying = state == PlayerState.playing;
-        });
-      }
-    });
-
-    // Memperbarui posisi dan durasi preview
-    player.onPositionChanged.listen((p) {
-      if (mounted) {
-        setState(() {
-          posisi = p;
-        });
-      }
-    });
-
-    player.onDurationChanged.listen((d) {
-      if (mounted) {
-        setState(() {
-          total = d;
-        });
-      }
-    });
-  }
-
-  // Mengatur pemutaran lagu
-  Future<void> tombolPlay() async {
-    try {
-      if (isPlaying) {
-        await player.pause();
-      } else if (player.state == PlayerState.paused) {
-        await player.resume();
-      } else {
-        final url = widget.song['previewUrl'];
-
-        if (url != null && url.toString().isNotEmpty) {
-          await player.play(UrlSource(url.toString()));
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Preview tidak tersedia')),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Audio Error: $e');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memutar lagu')),
-        );
-      }
-    }
-  }
-
-  // Mengubah durasi menjadi format menit:detik
-  String format(Duration d) {
-    final menit = d.inMinutes;
-    final detik = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$menit:$detik';
-  }
-
-  // Menampilkan satu baris informasi lagu
-  Widget infoBaris(String label, String isi) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              isi,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    player.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final gambar = (widget.song['artworkUrl100'] ?? '')
-        .toString()
-        .replaceAll('100x100', '600x600');
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Detail Lagu'),
-        backgroundColor: Colors.lightGreen,
-        foregroundColor: Colors.white,
-      ),
-
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, 40, 24, 24),
-
-        // Membatasi lebar konten detail pada layar komputer
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 500),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Cover album tetap di tengah
-                Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.network(
-                      gambar,
-                      width: (MediaQuery.of(context).size.width * 0.8)
-                          .clamp(0.0, 350.0),
-                      height: (MediaQuery.of(context).size.width * 0.8)
-                          .clamp(0.0, 350.0),
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) =>
-                          Icon(Icons.music_note, size: 150),
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 20),
-
-                // Judul lagu dan nama artis
-                Text(
-                  widget.song['trackName'] ?? '-',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                SizedBox(height: 8),
-
-                Text(
-                  widget.song['artistName'] ?? '-',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 17,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-
-                SizedBox(height: 24),
-
-                // Kotak informasi lagu
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.lightGreen.shade50,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Column(
-                    children: [
-                      infoBaris(
-                        'Album',
-                        widget.song['collectionName'] ?? '-',
-                      ),
-                      Divider(),
-                      infoBaris(
-                        'Genre',
-                        widget.song['primaryGenreName'] ?? '-',
-                      ),
-                      Divider(),
-                      infoBaris(
-                        'Rilis',
-                        (widget.song['releaseDate'] ?? '-')
-                            .toString()
-                            .split('T')[0],
-                      ),
-                      Divider(),
-                      infoBaris(
-                        'Durasi',
-                        format(Duration(
-                          milliseconds:
-                          widget.song['trackTimeMillis'] ?? 0,
-                        )),
-                      ),
-                    ],
-                  ),
-                ),
-
-                SizedBox(height: 28),
-
-                Text(
-                  'Preview Lagu',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                SizedBox(height: 12),
-
-                // Progress pemutaran preview
-                Slider(
-                  activeColor: Colors.lightGreen,
-                  inactiveColor: Colors.lightGreen.shade100,
-                  value: posisi.inSeconds.toDouble().clamp(
-                    0.0,
-                    total.inSeconds > 0
-                        ? total.inSeconds.toDouble()
-                        : 1.0,
-                  ),
-                  max: total.inSeconds > 0
-                      ? total.inSeconds.toDouble()
-                      : 1.0,
-                  onChanged: (value) {
-                    player.seek(
-                      Duration(seconds: value.toInt()),
-                    );
-                  },
-                ),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(format(posisi)),
-                    Text(format(total)),
-                  ],
-                ),
-
-                SizedBox(height: 12),
-
-                // Tombol Play/Pause tetap seperti kode awal
-                IconButton(
-                  iconSize: 70,
-                  color: Colors.lightGreen,
-                  icon: Icon(
-                    isPlaying
-                        ? Icons.pause_circle_filled
-                        : Icons.play_circle_filled,
-                  ),
-                  onPressed: tombolPlay,
                 ),
               ],
             ),
