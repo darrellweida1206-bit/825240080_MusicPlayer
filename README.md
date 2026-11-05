@@ -1,17 +1,26 @@
-# pertemuan11
+# Music Player - Flutter
 
-A new Flutter project.
+Aplikasi Music Player menggunakan **Flutter dan iTunes Search API** untuk mencari lagu, melihat informasi lagu, serta mendengarkan preview audio.
 
-## Getting Started
+## Fitur
+- Pencarian lagu berdasarkan judul atau nama artis.
+- Menampilkan cover album dan informasi detail lagu.
+- Preview audio dengan Play/Pause dan slider.
+- Pengurutan lagu A–Z.
+- Dark Mode dan Light Mode.
+- Loading, penanganan error, dan tampilan responsif.
 
-This project is a starting point for a Flutter application.
+## Teknologi
+- Flutter (Dart)
+- iTunes Search API
+- Package `http` dan `audioplayers`
 
-A few resources to get you started if this is your first Flutter project:
+## Struktur Project
+- `main.dart`: Halaman utama, pencarian API, dan pengaturan tema.
+- `detail_page.dart`: Detail lagu dan pemutar preview.
+- `song.dart`: Model data dan parsing JSON.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Cara Menjalankan
+1. Buka project di Android Studio.
+2. Jalankan `flutter pub get` untuk menyiapkan dependencies.
+3. Jalankan aplikasi menggunakan `flutter run`.
